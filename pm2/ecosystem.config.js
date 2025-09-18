@@ -21,11 +21,12 @@ module.exports = {
       env: { PYTHONPATH: process.cwd() }
     },
     {
-      name: 'vinted-bot-scheduler',
-      script: 'venv/bin/celery',
-      args: '-A backend.app.tasks.celery_app beat --loglevel=info',
+      name: 'vinted-bot-scraper',
+      script: 'venv/bin/python',
+      args: '-m backend.app.tasks.scraper',
       cwd: '.',
       instances: 1,
+      autorestart: true,
       env: { PYTHONPATH: process.cwd() }
     }
   ]
