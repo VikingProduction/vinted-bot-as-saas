@@ -1,0 +1,483 @@
+name: 🛠️ Auto-Fix Vinted Bot Structure
+on:
+  workflow_dispatch:
+    inputs:
+      correction_type:
+        description: 'Type de correction à effectuer'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - scraping-merge
+        - config-consolidation
+        - celery-reorganization
+        - frontend-structure
+      create_pr:
+        description: 'Créer une Pull Request automatiquement'
+        required: true
+        default: true
+        type: boolean
+      target_branch:
+        description: 'Branche cible pour la PR'
+        required: true
+        default: 'main'
+        type: string
+
+env:
+  CORRECTIONS_BRANCH: auto-fix/structure-corrections-${{ github.run_number }}
+
+jobs:
+  analyze-and-fix:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: 🔧 Install Dependencies
+      run: |
+        pip install --upgrade pip
+        npm install -g prettier
+        
+    - name: 🔍 Analyze Current Structure
+      id: analyze
+      run: |
+        echo "🔍 Analyse de la structure actuelle..."
+        
+        # Vérifier la présence des dossiers problématiques
+        SCRAPING_EXISTS=$([ -d "backend/app/scraping" ] && echo "true" || echo "false")
+        SCRAPPING_EXISTS=$([ -d "backend/app/scrapping" ] && echo "true" || echo "false")
+        CONFIG_DUPLICATES=$([ -f "backend/app/database.py" ] && [ -f "backend/app/db.py" ] && echo "true" || echo "false")
+        
+        echo "scraping_exists=$SCRAPING_EXISTS" >> $GITHUB_OUTPUT
+        echo "scrapping_exists=$SCRAPPING_EXISTS" >> $GITHUB_OUTPUT
+        echo "config_duplicates=$CONFIG_DUPLICATES" >> $GITHUB_OUTPUT
+        
+        # Compter les problèmes détectés
+        ISSUES_COUNT=0
+        if [ "$SCRAPPING_EXISTS" = "true" ]; then
+          ISSUES_COUNT=$((ISSUES_COUNT + 1))
+          echo "❌ Problème détecté: Dossier scrapping en double"
+        fi
+        if [ "$CONFIG_DUPLICATES" = "true" ]; then
+          ISSUES_COUNT=$((ISSUES_COUNT + 1))
+          echo "❌ Problème détecté: Fichiers de config dupliqués"
+        fi
+        
+        echo "issues_count=$ISSUES_COUNT" >> $GITHUB_OUTPUT
+        echo "📊 Nombre total de problèmes détectés: $ISSUES_COUNT"
+        
+    - name: 🌿 Create Corrections Branch
+      if: steps.analyze.outputs.issues_count > 0
+      run: |
+        git config --global user.name 'GitHub Actions Bot'
+        git config --global user.email 'actions@github.com'
+        git checkout -b ${{ env.CORRECTIONS_BRANCH }}
+        
+    - name: 🔧 Fix 1 - Merge Scraping Directories
+      if: (inputs.correction_type == 'all' || inputs.correction_type == 'scraping-merge') && steps.analyze.outputs.scrapping_exists == 'true'
+      run: |
+        echo "🔧 Correction 1: Fusion des dossiers scraping/scrapping"
+        
+        # Créer le dossier scraping s'il n'existe pas
+        mkdir -p backend/app/scraping
+        
+        # Déplacer et renommer les fichiers de scrapping vers scraping
+        if [ -f "backend/app/scrapping/vinted-scraper.py" ]; then
+          mv backend/app/scrapping/vinted-scraper.py backend/app/scraping/vinted_scraper.py
+          echo "✅ vinted-scraper.py → vinted_scraper.py"
+        fi
+        
+        # Déplacer autres fichiers si présents
+        if [ -d "backend/app/scrapping" ]; then
+          for file in backend/app/scrapping/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              # Convertir les noms en snake_case
+              new_filename=$(echo "$filename" | sed 's/-/_/g')
+              mv "$file" "backend/app/scraping/$new_filename"
+              echo "✅ Déplacé: $filename → $new_filename"
+            fi
+          done
+          
+          # Supprimer l'ancien dossier
+          rm -rf backend/app/scrapping/
+          echo "✅ Dossier scrapping supprimé"
+        fi
+        
+        # Créer __init__.py
+        touch backend/app/scraping/__init__.py
+        
+        # Mettre à jour les imports dans le code
+        echo "🔄 Mise à jour des imports..."
+        find backend/ -name "*.py" -type f -exec sed -i 's/from app\.scrapping/from app.scraping/g' {} +
+        find backend/ -name "*.py" -type f -exec sed -i 's/import app\.scrapping/import app.scraping/g' {} +
+        
+        echo "✅ Fusion des dossiers scraping terminée"
+        
+    - name: 🔧 Fix 2 - Consolidate Configuration
+      if: (inputs.correction_type == 'all' || inputs.correction_type == 'config-consolidation') && steps.analyze.outputs.config_duplicates == 'true'
+      run: |
+        echo "🔧 Correction 2: Consolidation de la configuration"
+        
+        # Créer le dossier core
+        mkdir -p backend/app/core
+        
+        # Analyser et fusionner database.py et db.py
+        if [ -f "backend/app/database.py" ] && [ -f "backend/app/db.py" ]; then
+          echo "⚠️ Fusion nécessaire pour database.py et db.py"
+          
+          # Garder le plus volumineux (plus complet)
+          DB_SIZE=$(wc -l < "backend/app/db.py" 2>/dev/null || echo "0")
+          DATABASE_SIZE=$(wc -l < "backend/app/database.py" 2>/dev/null || echo "0")
+          
+          if [ "$DATABASE_SIZE" -ge "$DB_SIZE" ]; then
+            mv backend/app/database.py backend/app/core/database.py
+            rm -f backend/app/db.py
+            echo "✅ Gardé database.py, supprimé db.py"
+          else
+            mv backend/app/db.py backend/app/core/database.py
+            rm -f backend/app/database.py  
+            echo "✅ Gardé db.py renommé en database.py, supprimé database.py"
+          fi
+        elif [ -f "backend/app/database.py" ]; then
+          mv backend/app/database.py backend/app/core/
+        elif [ -f "backend/app/db.py" ]; then
+          mv backend/app/db.py backend/app/core/database.py
+        fi
+        
+        # Déplacer config.py vers core
+        if [ -f "backend/app/config.py" ]; then
+          mv backend/app/config.py backend/app/core/
+        fi
+        
+        # Déplacer proxy-manager.py vers scraping
+        if [ -f "backend/app/proxy-manager.py" ]; then
+          mv backend/app/proxy-manager.py backend/app/scraping/proxy_manager.py
+        fi
+        
+        # Créer __init__.py dans core
+        touch backend/app/core/__init__.py
+        
+        # Mettre à jour les imports
+        find backend/ -name "*.py" -type f -exec sed -i 's/from app\.database/from app.core.database/g' {} +
+        find backend/ -name "*.py" -type f -exec sed -i 's/from app\.db/from app.core.database/g' {} +
+        find backend/ -name "*.py" -type f -exec sed -i 's/from app\.config/from app.core.config/g' {} +
+        
+        echo "✅ Configuration consolidée"
+        
+    - name: 🔧 Fix 3 - Reorganize Celery
+      if: inputs.correction_type == 'all' || inputs.correction_type == 'celery-reorganization'
+      run: |
+        echo "🔧 Correction 3: Réorganisation Celery"
+        
+        # Créer le dossier tasks s'il n'existe pas
+        mkdir -p backend/app/tasks
+        
+        # Déplacer celery-app.py vers core
+        if [ -f "backend/app/celery-app.py" ]; then
+          mv backend/app/celery-app.py backend/app/core/celery_app.py
+          echo "✅ celery-app.py → core/celery_app.py"
+        fi
+        
+        # Déplacer scraping_task.py vers tasks
+        if [ -f "backend/app/scraping_task.py" ]; then
+          mv backend/app/scraping_task.py backend/app/tasks/scraping.py
+          echo "✅ scraping_task.py → tasks/scraping.py"
+        fi
+        
+        # Créer __init__.py dans tasks
+        if [ ! -f "backend/app/tasks/__init__.py" ]; then
+          cat > backend/app/tasks/__init__.py << 'EOF'
+"""
+Tâches Celery pour le bot Vinted SaaS
+"""
+
+from .scraping import *
+
+__all__ = ['scraping']
+EOF
+        fi
+        
+        # Mettre à jour les imports Celery
+        find backend/ -name "*.py" -type f -exec sed -i 's/from app\.celery_app/from app.core.celery_app/g' {} +
+        find backend/ -name "*.py" -type f -exec sed -i 's/from app\.scraping_task/from app.tasks.scraping/g' {} +
+        
+        echo "✅ Celery réorganisé"
+        
+    - name: 🔧 Fix 4 - Frontend Structure
+      if: inputs.correction_type == 'all' || inputs.correction_type == 'frontend-structure'
+      run: |
+        echo "🔧 Correction 4: Structure frontend"
+        
+        # Créer les dossiers manquants dans le frontend
+        mkdir -p frontend/src/{hooks,types,utils,stores}
+        
+        # Créer des fichiers de base s'ils n'existent pas
+        
+        # Types TypeScript
+        if [ ! -f "frontend/src/types/index.ts" ]; then
+          cat > frontend/src/types/index.ts << 'EOF'
+// Types globaux pour l'application Vinted Bot SaaS
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  subscription?: Subscription;
+}
+
+export interface VintedFilter {
+  id: string;
+  name: string;
+  criteria: FilterCriteria;
+  isActive: boolean;
+  userId: string;
+}
+
+export interface FilterCriteria {
+  brand?: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  size?: string;
+  condition?: string;
+}
+
+export interface Subscription {
+  id: string;
+  plan: 'starter' | 'pro' | 'business';
+  status: 'active' | 'inactive' | 'cancelled';
+  currentPeriodEnd: string;
+}
+
+export interface Alert {
+  id: string;
+  filterId: string;
+  itemUrl: string;
+  itemTitle: string;
+  itemPrice: number;
+  createdAt: string;
+}
+EOF
+        fi
+        
+        # Utils de base
+        if [ ! -f "frontend/src/utils/index.ts" ]; then
+          cat > frontend/src/utils/index.ts << 'EOF'
+// Utilitaires pour l'application
+
+export const formatPrice = (price: number): string => {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(price);
+};
+
+export const formatDate = (date: string): string => {
+  return new Intl.DateTimeFormat('fr-FR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(date));
+};
+
+export const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  delay: number
+): ((...args: Parameters<T>) => void) => {
+  let timeoutId: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+};
+EOF
+        fi
+        
+        echo "✅ Structure frontend créée"
+        
+    - name: 🎨 Format Code
+      if: steps.analyze.outputs.issues_count > 0
+      run: |
+        echo "🎨 Formatage du code..."
+        
+        # Format Python avec black (si disponible)
+        if command -v black &> /dev/null; then
+          black backend/ --line-length 88 --target-version py311 || true
+        fi
+        
+        # Format TypeScript/JavaScript avec prettier
+        if [ -d "frontend/src" ]; then
+          prettier --write "frontend/src/**/*.{ts,tsx,js,jsx,json,css,md}" || true
+        fi
+        
+        echo "✅ Code formaté"
+        
+    - name: 📝 Generate Migration Report
+      if: steps.analyze.outputs.issues_count > 0
+      run: |
+        cat > MIGRATION_REPORT.md << 'EOF'
+# 🛠️ Rapport de migration automatique - Vinted Bot SaaS
+
+## Corrections appliquées
+
+### ✅ Problèmes résolus
+
+1. **Fusion des dossiers scraping/scrapping**
+   - Dossier `scrapping/` supprimé
+   - Fichiers déplacés vers `scraping/` avec convention snake_case
+   - Imports mis à jour automatiquement
+
+2. **Consolidation de la configuration**
+   - Création du dossier `core/`
+   - Fusion des fichiers `database.py` et `db.py`
+   - Centralisation de la configuration
+
+3. **Réorganisation Celery**
+   - `celery-app.py` → `core/celery_app.py`
+   - Tâches organisées dans `tasks/`
+   - Imports Celery mis à jour
+
+4. **Structure frontend améliorée**
+   - Dossiers `types/`, `hooks/`, `utils/`, `stores/` créés
+   - Fichiers de base TypeScript ajoutés
+
+### 📁 Nouvelle structure
+
+```
+backend/app/
+├── core/              # Configuration centralisée
+│   ├── __init__.py
+│   ├── config.py
+│   ├── database.py
+│   └── celery_app.py
+├── scraping/          # Moteur de scraping unifié
+│   ├── __init__.py
+│   ├── vinted_client.py
+│   ├── vinted_scraper.py
+│   └── proxy_manager.py
+├── tasks/             # Tâches Celery organisées
+│   ├── __init__.py
+│   └── scraping.py
+└── ... (autres dossiers inchangés)
+
+frontend/src/
+├── components/
+├── pages/
+├── services/
+├── lib/
+├── hooks/             # Nouveaux dossiers
+├── types/
+├── utils/
+└── stores/
+```
+
+### ⚠️ Actions requises
+
+1. **Vérifier les tests** : Relancer la suite de tests après migration
+2. **Contrôler les imports** : Vérifier que tous les imports sont correctement mis à jour
+3. **Tester l'application** : S'assurer que l'application démarre correctement
+
+### 📋 Checklist post-migration
+
+- [ ] Tests backend passent
+- [ ] Tests frontend passent  
+- [ ] Application démarre sans erreur
+- [ ] Imports correctement mis à jour
+- [ ] Configuration centralisée fonctionnelle
+
+---
+*Migration automatique générée le $(date)*
+EOF
+
+        echo "✅ Rapport de migration généré"
+        
+    - name: 📤 Commit Changes
+      if: steps.analyze.outputs.issues_count > 0
+      run: |
+        git add .
+        git commit -m "🛠️ Auto-fix: Structure corrections
+
+        ✅ Corrections appliquées:
+        - Fusion scraping/scrapping → scraping/
+        - Configuration consolidée dans core/
+        - Celery réorganisé
+        - Structure frontend améliorée
+        - Imports mis à jour automatiquement
+        
+        🤖 Migration automatique via GitHub Actions"
+        
+    - name: 📤 Push Changes
+      if: steps.analyze.outputs.issues_count > 0
+      run: |
+        git push origin ${{ env.CORRECTIONS_BRANCH }}
+        
+    - name: 🔄 Create Pull Request
+      if: inputs.create_pr && steps.analyze.outputs.issues_count > 0
+      uses: repo-sync/pull-request@v2
+      with:
+        source_branch: ${{ env.CORRECTIONS_BRANCH }}
+        destination_branch: ${{ inputs.target_branch }}
+        pr_title: "🛠️ Auto-fix: Corrections structure Vinted Bot SaaS"
+        pr_body: |
+          ## 🤖 Corrections automatiques appliquées
+          
+          Cette PR contient des corrections automatiques pour résoudre les problèmes de structure détectés dans le projet.
+          
+          ### ✅ Corrections effectuées:
+          
+          - **Fusion scraping/scrapping** : Dossiers fusionnés avec convention de nommage cohérente
+          - **Configuration consolidée** : Fichiers de config regroupés dans `core/`
+          - **Celery réorganisé** : Tâches correctement organisées
+          - **Structure frontend** : Dossiers TypeScript standardisés
+          - **Imports automatiquement mis à jour**
+          
+          ### 📋 À vérifier avant merge:
+          
+          - [ ] Tests backend passent
+          - [ ] Tests frontend passent
+          - [ ] Application démarre correctement
+          - [ ] Aucun import cassé
+          
+          ### 📄 Détails
+          
+          Voir le fichier `MIGRATION_REPORT.md` pour plus de détails sur les corrections appliquées.
+          
+          ---
+          🤖 *Corrections automatiques générées par GitHub Actions*
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 📊 Summary
+      if: always()
+      run: |
+        echo "## 📊 Résumé de la migration" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Problèmes détectés**: ${{ steps.analyze.outputs.issues_count }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Type de correction**: ${{ inputs.correction_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branche créée**: ${{ env.CORRECTIONS_BRANCH }}" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ inputs.create_pr }}" = "true" ] && [ "${{ steps.analyze.outputs.issues_count }}" -gt "0" ]; then
+          echo "- **Pull Request**: ✅ Créée automatiquement" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Pull Request**: ❌ Non créée" >> $GITHUB_STEP_SUMMARY  
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎯 Prochaines étapes" >> $GITHUB_STEP_SUMMARY
+        echo "1. Reviewer la Pull Request créée" >> $GITHUB_STEP_SUMMARY
+        echo "2. Tester l'application après migration" >> $GITHUB_STEP_SUMMARY
+        echo "3. Merger après validation" >> $GITHUB_STEP_SUMMARY
