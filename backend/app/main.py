@@ -1,5 +1,4 @@
-# backend/app/main.py
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -14,6 +13,7 @@ from .auth.controllers import router as auth_router
 from .billing.controllers import router as billing_router
 from .routers.api import router as api_router
 from .monitoring.metrics import metrics_app
+from .routers.realtime import router as realtime_router
 
 # Env/Settings simples (pas de dépendance externe)
 ENV = os.getenv("ENVIRONMENT", "development")
@@ -35,7 +35,7 @@ app = FastAPI(
 # Compression
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
-# CORS piloté par env (par défaut permissif comme chez toi)
+# CORS piloté par env (par défaut permissif)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ["*"] else ["*"],
@@ -44,7 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Trusted hosts (en prod: mets ton domaine, ex: "vintedbot.example.com")
+# Trusted hosts 
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=TRUSTED_HOSTS if TRUSTED_HOSTS != ["*"] else ["*"],
@@ -57,11 +57,9 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    # CSP light en exemple; adapte selon ton frontend
-    # response.headers.setdefault("Content-Security-Policy", "default-src 'self'; img-src * data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
     return response
 
-# Access log minimal avec temps de réponse (utile en prod natif)
+# Access log minimal avec temps de réponse
 @app.middleware("http")
 async def access_log(request: Request, call_next):
     start = time.perf_counter()
@@ -70,7 +68,6 @@ async def access_log(request: Request, call_next):
         return response
     finally:
         dur_ms = (time.perf_counter() - start) * 1000
-        # remplace par un logger structuré si tu veux
         path = request.url.path
         method = request.method
         status = getattr(locals().get('response', None), "status_code", 500)
@@ -96,6 +93,7 @@ app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(billing_router, prefix="/api", tags=["billing"])
 app.include_router(api_router, prefix="/api", tags=["api"])
+app.include_router(realtime_router, prefix="/realtime", tags=["realtime"])
 
 # Metrics Prometheus
 app.mount("/metrics", metrics_app)
