@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
-from ..database import get_db
+from ..core.database import get_db
 from ..models.filter import VintedFilter
 from ..auth.auth_bearer import JWTBearer
 
