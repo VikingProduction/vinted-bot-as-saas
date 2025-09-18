@@ -98,6 +98,10 @@ cd frontend && npm install
 
 # Copier le template d'environnement
 cp env.example .env
+
+# Installer des dépendances dans frontend
+npm install @material-ui/core @material-ui/icons
+npm install clsx moment react-router-dom
 ```
 
 ## Configuration
