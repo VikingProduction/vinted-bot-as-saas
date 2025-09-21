@@ -1,8 +1,6 @@
-# backend/app/routers/realtime.py
-
 from fastapi import APIRouter, WebSocket
 import asyncio
-from backend.app.utils.event_bus import redis
+from ..utils.event_bus import redis
 
 router = APIRouter()
 
