@@ -1,9 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Boolean
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import datetime
-
-Base = declarative_base()
+from ..core.database import Base
 
 class Alert(Base):
     __tablename__ = "alerts"
