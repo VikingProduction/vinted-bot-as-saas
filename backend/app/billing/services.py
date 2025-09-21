@@ -1,8 +1,8 @@
 import stripe
 from datetime import datetime
 from sqlalchemy.orm import Session
-from ..config import get_settings
-from ..models.subscription import Subscription
+from ..core.config import get_settings
+from ..models.subscriptions import Subscription
 from ..models.user import User
 
 settings = get_settings()
