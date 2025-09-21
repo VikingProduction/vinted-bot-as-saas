@@ -1,9 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import datetime
-
-Base = declarative_base()
+from ..core.database import Base
 
 class VintedFilter(Base):
     __tablename__ = "vinted_filters"
