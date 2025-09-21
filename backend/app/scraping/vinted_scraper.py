@@ -10,9 +10,8 @@ from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
-
-from ..config import settings, logger
-from .proxy_manager import ProxyManager
+from ..core.config import settings, logger
+from ..proxy_manager import ProxyManager  # Le fichier est à la racine de app/
 from .anti_bot import AntiBot
 
 
