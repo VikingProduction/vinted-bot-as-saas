@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from ..auth.deps import get_current_user
-from ..db import get_db
 from ..models.user import User
-from ..config import get_settings
+from ..core.database import get_db
+from ..core.config import get_settings
 from .services import create_checkout_session, create_billing_portal, upsert_subscription
 import stripe
 
