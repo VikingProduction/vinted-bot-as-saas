@@ -91,9 +91,9 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
 # Routes existantes
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-app.include_router(billing_router, prefix="/api", tags=["billing"])
 app.include_router(api_router, prefix="/api", tags=["api"])
 app.include_router(realtime_router, prefix="/realtime", tags=["realtime"])
+app.include_router(billing_router, prefix="/api/billing", tags=["billing"])  
 
 # Metrics Prometheus
 app.mount("/metrics", metrics_app)
