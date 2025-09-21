@@ -1,10 +1,27 @@
 import os
+import structlog
 from functools import lru_cache
 
-class Settings:
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "mysql://vinted_user:pass@localhost:3306/vinted_bot")
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+# Configuration du logger
+structlog.configure(
+    processors=[
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer()
+    ],
+    wrapper_class=structlog.stdlib.BoundLogger,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
 
+logger = structlog.get_logger("vinted_bot")
+
+class Settings:
+    database_url: str = os.getenv("DATABASE_URL", "mysql://vinted_user:pass@localhost:3306/vinted_bot")
+    redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0") 
+    redis_password: str = os.getenv("REDIS_PASSWORD", "")
+    
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change_me")
     JWT_ALG: str = "HS256"
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
@@ -15,11 +32,17 @@ class Settings:
 
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    debug: bool = ENVIRONMENT == "development"
 
     SMARTPROXY_USERNAME: str = os.getenv("SMARTPROXY_USERNAME", "")
     SMARTPROXY_PASSWORD: str = os.getenv("SMARTPROXY_PASSWORD", "")
+    
+    # Ajout des attributs manquants pour scraping
+    scraping_delay_min: float = 2.0
+    scraping_delay_max: float = 5.0
+    snipping_enabled: bool = True
 
-    # quotas par plan (exemple)
+    # quotas par plan
     PLAN_LIMITS = {
         "free": {"filters": 1, "checks_per_min": 1},
         "basic": {"filters": 5, "checks_per_min": 2},
@@ -30,3 +53,6 @@ class Settings:
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+# Instance globale pour compatibilité
+settings = get_settings()
