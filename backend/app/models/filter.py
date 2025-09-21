@@ -25,3 +25,4 @@ class VintedFilter(Base):
     )
 
     user = relationship("User", back_populates="filters")
+    alerts = relationship("Alert", back_populates="filter")
