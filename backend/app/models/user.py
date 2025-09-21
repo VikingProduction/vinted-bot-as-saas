@@ -15,3 +15,5 @@ class User(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     subscriptions = relationship("Subscription", back_populates="user")
+    alerts = relationship("Alert", back_populates="user")
+    filters = relationship("VintedFilter", back_populates="user")
