@@ -72,7 +72,9 @@ install_system_deps() {
                 python3-pip \
                 nodejs \
                 npm \
-                mysql-server \
+                mariadb-server \
+                mariadb-client \
+                libmariadb-dev \
                 redis-server \
                 nginx \
                 git \
@@ -81,7 +83,6 @@ install_system_deps() {
                 unzip \
                 build-essential \
                 pkg-config \
-                libmysqlclient-dev
             ;;
         "redhat")
             sudo yum update -y
@@ -120,8 +121,8 @@ setup_mysql() {
     # Démarrer MySQL
     case $OS in
         "debian"|"redhat")
-            sudo systemctl start mysql
-            sudo systemctl enable mysql
+            sudo systemctl start mariadb
+            sudo systemctl enable mariadb   
             ;;
         "macos")
             brew services start mysql
@@ -596,10 +597,10 @@ for app in data:
 echo -e "\nServices Système:"
 
 # MySQL
-if systemctl is-active --quiet mysql; then
-    echo "✅ MySQL: Actif"
+if systemctl is-active --quiet mariadb; then
+    echo "✅ MariaDB: Actif"
 else
-    echo "❌ MySQL: Inactif"
+    echo "❌ MariaDB: Inactif"
 fi
 
 # Redis
