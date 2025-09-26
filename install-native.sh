@@ -71,7 +71,6 @@ install_system_deps() {
                 python${PYTHON_VERSION}-venv \
                 python3-pip \
                 nodejs \
-                npm \
                 mariadb-server \
                 mariadb-client \
                 libmariadb-dev \
@@ -150,8 +149,8 @@ setup_redis() {
     
     case $OS in
         "debian"|"redhat")
-            sudo systemctl start redis
-            sudo systemctl enable redis
+            sudo systemctl start redis-server
+            sudo systemctl enable redis-server
             ;;
         "macos")
             brew services start redis
@@ -604,7 +603,7 @@ else
 fi
 
 # Redis
-if systemctl is-active --quiet redis; then
+if systemctl is-active --quiet redis-server; then
     echo "✅ Redis: Actif"
 else
     echo "❌ Redis: Inactif"
