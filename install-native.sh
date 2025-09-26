@@ -133,7 +133,7 @@ setup_mysql() {
     sleep 5
     
     # Créer la base de données et l'utilisateur
-    mysql -u root << EOF
+    sudo mariadb << EOF
 CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';
