@@ -40,6 +40,11 @@ detect_os() {
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         if [ -f /etc/debian_version ]; then
             OS="debian"
+            # Vérifier si c'est Debian 12
+            DEBIAN_VERSION=$(cat /etc/debian_version)
+            if [[ $DEBIAN_VERSION == *"12"* ]] || [[ $DEBIAN_VERSION == *"bookworm"* ]]; then
+                echo "Debian 12 (Bookworm) détecté"
+            fi
         elif [ -f /etc/redhat-release ]; then
             OS="redhat"
         else
@@ -52,6 +57,7 @@ detect_os() {
         exit 1
     fi
 }
+
 
 # Installation des prérequis système
 install_system_deps() {
